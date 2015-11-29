@@ -1,0 +1,1 @@
+clear && ant clean && ant && java -ea -Xmx2g -cp "classes:extlib/*" cs221.game.GamePlay
