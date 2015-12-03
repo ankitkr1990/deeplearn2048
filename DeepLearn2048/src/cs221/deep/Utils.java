@@ -36,4 +36,14 @@ public class Utils {
 		}
 		return classes.get(index);
 	}
+	
+	public static boolean SimpleMatrixEquals(SimpleMatrix first, SimpleMatrix second) {
+		if (first.numRows() != second.numRows() || first.numCols() != second.numCols())
+			return false;
+		for (int i = 0; i < first.numRows(); ++i)
+			for (int j = 0; j < first.numCols(); ++j)
+				if (first.get(i, j) != second.get(i, j))
+					return false;
+		return true;
+	}
 }

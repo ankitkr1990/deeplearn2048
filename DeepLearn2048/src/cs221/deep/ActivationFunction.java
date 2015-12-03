@@ -44,13 +44,18 @@ public interface ActivationFunction {
 		}
 	}
 	
+	// Leaky rectifier linear unit
 	public class ReLU implements ActivationFunction {
+		private static float neg_slope = 0.01f; 
 		@Override
 		public SimpleMatrix valueAt(SimpleMatrix z) {
 			SimpleMatrix value = new SimpleMatrix(z.numRows(), z.numCols());
 			for (int i = 0; i < z.numRows(); ++i)
-				if (z.get(i, 0) > 0)
+				if (z.get(i, 0) > 0) {
 					value.set(i, 0, z.get(i, 0));
+				} else {
+					value.set(i, 0, z.get(i, 0) * neg_slope);
+				}
 			assert !value.hasUncountable();
 			return value;
 		}
@@ -59,8 +64,11 @@ public interface ActivationFunction {
 		public SimpleMatrix derivativeValueAt(SimpleMatrix z) {
 			SimpleMatrix derivative = new SimpleMatrix(z.numRows(), z.numCols());
 			for (int i = 0; i < z.numRows(); ++i)
-				if (z.get(i, 0) > 0)
+				if (z.get(i, 0) > 0) {
 					derivative.set(i, 0, 1);
+				} else {
+					derivative.set(i, 0, -1 * neg_slope);
+				}
 			assert !derivative.hasUncountable();
 			return derivative;
 		}

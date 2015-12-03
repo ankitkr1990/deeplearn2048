@@ -36,6 +36,22 @@ public class Game2048 {
 			display = null;
 	}
 
+	public Game2048(Game2048 other) {
+		state = new BoardState(other.state);
+		win = other.win;
+		lose = other.lose;
+		score = other.score;
+		display = null;  // display is always off for this engine.
+	}
+	
+	public void copyStateFrom(Game2048 other) {
+		state = new BoardState(other.state);
+		win = other.win;
+		lose = other.lose;
+		score = other.score;
+		// display unchanged.
+	}
+
 	public void resetGame() {
 		state.reset();
 		win = false;
@@ -55,7 +71,19 @@ public class Game2048 {
 
 	// Returns (afterstate, increment)
 	public Pair<BoardState, Integer> performMove(Move move) {
+		if (display != null) {
+			try {
+				//System.out.println(move);
+			  //Thread.sleep(2000);
+				Thread.sleep(10);
+			} catch (InterruptedException ie) {
+				System.out.println("Thread woken up by interrupt : " + ie.toString());
+			}
+		}
+		//System.out.println("!--PerformMove----!");
 		Triplet<BoardState, Integer, Boolean> output = null;
+		//System.out.println("statebefore : " + state);
+		//System.out.println("Move : " + move);
 		if (move.equals(Move.UP)) {
 			output = state.up();
 		} else if (move.equals(Move.DOWN)) {
@@ -66,15 +94,19 @@ public class Game2048 {
 			output = state.left();
 		}
 		score += output.getSecond(); // Increment score
-		// Refrest game status
+		// Refresh game status
 		if (state.isWin()) win = true;
 		else if (!state.canMove()) lose = true;
+		//System.out.println("afterstate : " + output.getFirst());
+		//System.out.println("stateAfterMove : " + state);
+		//System.out.println("DONE : " + output.getThird());
 		assert output.getThird();
 		if (display != null) {
 			display.repaint(); // Repaint the display
 			// Eat some CPU time to make display bearable.
 			try {
-			  Thread.sleep(1000);
+			  //Thread.sleep(2000);
+				Thread.sleep(10);
 			} catch (InterruptedException ie) {
 				System.out.println("Thread woken up by interrupt : " + ie.toString());
 			}

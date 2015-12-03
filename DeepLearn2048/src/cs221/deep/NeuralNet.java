@@ -42,11 +42,34 @@ public class NeuralNet {
 		this.weights = new ArrayList<SimpleMatrix>(this.numLayers - 1);
 		this.biases = new ArrayList<SimpleMatrix>(this.numLayers - 1);
 		for (SimpleMatrix w : other.weights) {
-			this.weights.add(new SimpleMatrix(w));
+			SimpleMatrix copy = new SimpleMatrix(w);
+			//assert Utils.SimpleMatrixEquals(copy, w);
+			this.weights.add(copy);
 		}
 		for (SimpleMatrix b : other.biases) {
 			this.biases.add(new SimpleMatrix(b));
 		}
+	}
+	
+	public boolean equals(NeuralNet other) {
+		if (this.learningRate != other.learningRate ||
+				this.lambda != other.lambda ||
+				this.mini_batch_size != other.mini_batch_size ||
+				this.numLayers != other.numLayers ||
+				!this.sizes.equals(other.sizes) ||
+				this.weights.size() != other.weights.size() ||
+				this.biases.size() != other.biases.size()) {
+			return false;
+		}
+		for (int i = 0; i < this.weights.size(); ++i)
+			if (!Utils.SimpleMatrixEquals(this.weights.get(i), other.weights.get(i))) {
+				return false;
+			}
+		for (int i = 0; i < this.biases.size(); ++i)
+			if (!Utils.SimpleMatrixEquals(this.biases.get(i), other.biases.get(i))) {
+				return false;
+			}
+		return true;
 	}
 
 	/**
@@ -60,18 +83,18 @@ public class NeuralNet {
 																																// indices
 			double epsilon = Math.sqrt(6) / Math.sqrt(this.sizes.get(i - 1) + this.sizes.get(i));
 			this.weights.add(
-					SimpleMatrix.random(this.sizes.get(i), this.sizes.get(i - 1), 0, epsilon, new Random(System.nanoTime())));
+					SimpleMatrix.random(this.sizes.get(i), this.sizes.get(i - 1),  1e-2, epsilon, new Random(System.nanoTime())));
 		}
 	}
 
-	private void DumpNetworkParams() {
+	public void DumpNetworkParams() {
 		try {
 			// Dump network parameters.
 			PrintWriter networkParamWriters = new PrintWriter("network-params.txt", "UTF-8");
-			for (int l = 1; l < this.numLayers; ++l) {
-				networkParamWriters.println("Stats for layer : " + l);
-				networkParamWriters.println("W : " + this.weights.get(l - 1));
-				networkParamWriters.println("b : " + this.biases.get(l - 1));
+			for (int l = 0; l < this.numLayers - 1; ++l) {
+				networkParamWriters.println("Stats for layer : " + (l+1));
+				networkParamWriters.println("W : " + this.weights.get(l));
+				networkParamWriters.println("b : " + this.biases.get(l));
 			}
 			networkParamWriters.close();
 		} catch (Exception e) {
@@ -81,20 +104,23 @@ public class NeuralNet {
 
 	public void save() {
 		try {
-			for (int i = 0; i < this.weights.size(); ++i)
+			for (int i = 0; i < this.weights.size(); ++i) {
 				this.weights.get(i).saveToFileBinary("weights_layer_" + (i + 1) + ".data");
+				SimpleMatrix temp = SimpleMatrix.loadBinary("weights_layer_" + (i + 1) + ".data");
+			}
 			for (int i = 0; i < this.weights.size(); ++i)
 				this.biases.get(i).saveToFileBinary("biases_layer_" + (i + 1) + ".data");
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
+		DumpNetworkParams();  // dump a human readable version of weights.
 	}
 
-	public void load() {
+	public void loadFromFile() {
 		try {
-			for (int i = 0; i < this.numLayers; ++i)
+			for (int i = 0; i < this.numLayers - 1; ++i)
 				this.weights.set(i, SimpleMatrix.loadBinary("weights_layer_" + (i + 1) + ".data"));
-			for (int i = 0; i < this.numLayers; ++i)
+			for (int i = 0; i < this.numLayers - 1; ++i)
 				this.biases.set(i, SimpleMatrix.loadBinary("biases_layer_" + (i + 1) + ".data"));
 		} catch (IOException e) {
 			throw new RuntimeException(e);
@@ -136,6 +162,8 @@ public class NeuralNet {
 			assert !d_w.hasUncountable();
 			SimpleMatrix new_w = w.scale(1 - learningRate * (lambda)).minus(d_w.scale(learningRate / mini_batch.size()));
 			assert !new_w.hasUncountable();
+			//System.out.println("Previous: " + w.elementSum() + "  New = " + new_w.elementSum());
+			assert new_w.elementMaxAbs() > 0;
 			this.weights.set(i, new_w);
 		}
 		// Update biases
@@ -184,16 +212,44 @@ public class NeuralNet {
 			SimpleMatrix z = zs.get(zs.size() - l);
 			SimpleMatrix derivativeValue = this.activnFns.get(this.activnFns.size() - l).derivativeValueAt(z);
 			delta = this.weights.get(this.weights.size() - l + 1).transpose().mult(delta).elementMult(derivativeValue);
+			// assert delta.elementMaxAbs() > 0;  // the gradient must not vanish, otherwise learning will stall.
 			assert !delta.hasUncountable();
 			delta_b.set(delta_b.size() - l, delta);
 			delta_w.set(delta_w.size() - l, delta.mult(activations.get(activations.size() - l - 1).transpose()));
 		}
 		if (this.do_gradient_check) {
 			// Perform gradient check.
-			//assert GradientCheck.check(x, y, this.weights, this.biases, this.activnFns, this.costFn, this.weights, delta_w);
-			//assert GradientCheck.check(x, y, this.weights, this.biases, this.activnFns, this.costFn, this.biases, delta_b);
+			//GradientCheck.check(x, y, this.weights, this.biases, this.activnFns, this.costFn, this.weights, delta_w);
+			//GradientCheck.check(x, y, this.weights, this.biases, this.activnFns, this.costFn, this.biases, delta_b);
 		}
 		return new Pair<List<SimpleMatrix>, List<SimpleMatrix>>(delta_b, delta_w);
+	}
+
+	public float fractionOfDeadNeurons(List<Pair<SimpleMatrix, SimpleMatrix>> batch) {
+		int numNeurons = 0, numDeadNeurons = 0;
+		for (int i = 1; i < this.numLayers; ++i)
+			numNeurons += this.sizes.get(i);
+		boolean neuronActive[] = new boolean[numNeurons];
+		for (int i = 0; i < numNeurons; ++i)
+			neuronActive[i] = false;
+
+		for (Pair<SimpleMatrix, SimpleMatrix> datapoint : batch) {
+			SimpleMatrix featureVector = datapoint.getFirst();
+			int index = 0;
+			for (int i = 1; i < this.numLayers; ++i) {
+				SimpleMatrix b = this.biases.get(i - 1);
+				SimpleMatrix w = this.weights.get(i - 1);
+				featureVector = this.activnFns.get(i - 1).valueAt(w.mult(featureVector).plus(b));
+				for (int j = 0; j < featureVector.numRows(); ++j)
+					if (featureVector.get(j, 0) != 0)
+						neuronActive[index + j] = true;
+				index += this.sizes.get(i);
+			}
+		}
+		for (int i = 0; i < numNeurons; ++i)
+			if (!neuronActive[i])
+				++numDeadNeurons;
+		return (float)numDeadNeurons/numNeurons;
 	}
 
 	// target += valueToAdd

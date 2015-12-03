@@ -46,4 +46,8 @@ public class Tile {
   	if (!(o instanceof Tile)) return false;
   	return this.value == ((Tile) o).value;
   }
+  
+  public int hashCode() {
+  	return value;
+  }
 }

@@ -74,7 +74,7 @@ public class GradientCheck {
 				flops += (w.numRows() * w.numCols());
 			}
 			error += errFromMatrix(X, Y, weights, biases, activnFns, objFn, w, dw);
-			System.out.println(dw);
+			//System.out.println(dw);
 		}
 		error = Math.sqrt(error);
 

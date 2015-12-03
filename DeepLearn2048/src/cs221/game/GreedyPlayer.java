@@ -12,7 +12,7 @@ public class GreedyPlayer extends Player {
 	public Move chooseNextMove() {
 		ArrayList<Move> moves = simulator.getValidMoves();
 		Move bestMove = null;
-		float bestMoveScore = -1;
+		float bestMoveScore = -1 * Float.MAX_VALUE;
 		for (Move move : moves) {
 			float moveScore = simulator.evaluateMove(move).getSecond(); 
 			if (moveScore > bestMoveScore) {

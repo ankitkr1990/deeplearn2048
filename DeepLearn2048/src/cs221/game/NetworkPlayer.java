@@ -2,6 +2,8 @@ package cs221.game;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import org.ejml.simple.SimpleMatrix;
@@ -12,15 +14,15 @@ import cs221.util.*;
 
 class NetworkPlayer extends Player {
 	private Game2048 trainSimulator;
-	private NeuralNet network, fixedNetwork;
+	public NeuralNet network, fixedNetwork;
 
 	// static parameters.
 	private static boolean squashNums = true;
 	private static int replayMemoryLimit = 100000;
 	private static int minibatchSize = 10;
-	private static int numTrialsToTrain = 500;
+	private static int numTrialsToTrain = 50000;
 	private static int numMovesToFixTarget = 10;
-	private static float explorationProbability = 0.2f;
+	private static float explorationProbability = 0.3f;
 	private static float discount = 0.2f;
 	
 	private TransitionRecord[] replayMemory;
@@ -31,7 +33,7 @@ class NetworkPlayer extends Player {
 		super(_simulator);
 		trainSimulator = new Game2048(true /* automated */, false /* displayActive */);
 		network = new NeuralNet(
-				1 /* lr */, 
+				0.01 /* lr */, 
 				0 /* lambda */,
 				minibatchSize,
 				4 /* numlayers */,
@@ -41,12 +43,17 @@ class NetworkPlayer extends Player {
 		fixedNetwork = new NeuralNet(network);
 		replayMemory = new TransitionRecord[replayMemoryLimit];
 		numRecordsInreplayMemory = 0;
-		randomizer = new Random(System.nanoTime());
-		warmUpReplayMemory(minibatchSize);
+		randomizer = new Random(100);
+		warmUpReplayMemory();
 	}
 
+	public void loadFromFile() {
+		this.network.loadFromFile();
+		this.fixedNetwork = new NeuralNet(this.network);
+	}
+	
 	private int log2nlz (int num) {
-		if (num == 0 ) 
+		if (num == 0) 
 			return 0;
 		return 31 - Integer.numberOfLeadingZeros(num);
 	}
@@ -85,11 +92,12 @@ class NetworkPlayer extends Player {
 
   private TransitionRecord generateNewMoveAndRecord() {
   	Move move = generateEpsilonGreedyMove();
+  	assert move != null;
   	BoardState stateBeforeMove = trainSimulator.getState();
   	Pair<BoardState, Integer> t = trainSimulator.performMove(move);
   	BoardState afterState = t.getFirst();
   	BoardState stateAfterMove = trainSimulator.getState();
-  	float reward = squash(t.getSecond());
+  	float reward = squash(t.getSecond());  	
   	if (trainSimulator.getGameStatus() == GameStatus.WIN) {
   		reward = 5;
   	} else if (trainSimulator.getGameStatus() == GameStatus.LOSE) {
@@ -110,21 +118,21 @@ class NetworkPlayer extends Player {
   	}
   }
   
-  private void warmUpReplayMemory(int size) {
-  	resetSimulator();
-  	while (numRecordsInreplayMemory < 10 * minibatchSize) {
-  		generateNewMoveAndRecord();
-  		if (trainSimulator.getGameStatus() != GameStatus.NOT_OVER) {
+  private void warmUpReplayMemory() {
+  	System.out.println("Warming up record memory");
+  	while (numRecordsInreplayMemory < 2 * minibatchSize) {
+  		if (trainSimulator.getGameStatus() == GameStatus.NOT_OVER) {
+  			generateNewMoveAndRecord();
+  		} else {
   			trainSimulator.resetGame();
   		}
   	}
+  	System.out.println("Warming up complete");
   }
   
-  private List<TransitionRecord> getBatchOfSize(int size) {
-  	List<TransitionRecord> batch = new ArrayList<TransitionRecord>(size);
+  private void getBatchOfSize(int size, List<TransitionRecord> batch) {
   	for (int i = 0; i < size; ++i)
   		batch.add(replayMemory[randomizer.nextInt(numRecordsInreplayMemory)]);
-  	return batch;
   }
   
   private List<Pair<SimpleMatrix, SimpleMatrix>> prepareMiniBatch(List<TransitionRecord> records) {
@@ -152,7 +160,7 @@ class NetworkPlayer extends Player {
     if (state.getValidMoves().size() == 0) {
     	return new Pair<Move, Double>(null, new Double(0));
     }
-    Move bestMove = null; double bestMoveScore = -1;
+    Move bestMove = null; double bestMoveScore = - 1 * Double.MAX_VALUE;
     for (Move move : state.getValidMoves()) {
     	double moveScore = getQ(state, move);
     	if (moveScore > bestMoveScore) {
@@ -165,17 +173,29 @@ class NetworkPlayer extends Player {
   
   private Move generateEpsilonGreedyMove() {
   	ArrayList<Move> moves = trainSimulator.getValidMoves();
+  	assert moves.size() > 0;
   	if (randomizer.nextFloat() < this.explorationProbability) {
-  		return moves.get(randomizer.nextInt(moves.size()));
+  		//return moves.get(randomizer.nextInt(moves.size()));
+  		// take the monte carlo tree search move from this state to be the guided exploration.
+  		MonteCarloTreeSearchPlayer treeSearchPlayer = new MonteCarloTreeSearchPlayer(trainSimulator);
+  		return treeSearchPlayer.chooseNextMove();
   	}
   	// Choose the optimal move.
-  	return getV(trainSimulator.getState()).getFirst();
+  	Move bestMove = getV(trainSimulator.getState()).getFirst();
+  	assert bestMove != null;
+  	return bestMove;
   }
   
 	@Override
 	public Move chooseNextMove() {
 		// The move would be the one with the best V function.
-		return getV(simulator.getState()).getFirst();
+		//System.out.println("!--ChooseNextMove--!");
+		//System.out.println("State " + simulator.getState());
+		//System.out.println("Simulator available moves : " + simulator.getValidMoves());
+		//System.out.println("State available moves : " + simulator.getState().getValidMoves());
+		Move move = getV(simulator.getState()).getFirst();
+		//System.out.println("Chosen move : " + move);
+		return move;
 	}
 
 	@Override
@@ -188,20 +208,28 @@ class NetworkPlayer extends Player {
 					fixedNetwork = new NeuralNet(network);
 				}
 				TransitionRecord record = generateNewMoveAndRecord();
-				List<TransitionRecord> sample = null;
+				List<TransitionRecord> sample = new ArrayList<TransitionRecord>(minibatchSize);
 				if (minibatchSize > 1) {
-					sample = getBatchOfSize(this.minibatchSize - 1);
+					getBatchOfSize(this.minibatchSize - 1, sample);
 				}
 				sample.add(record);
-				// shuffle
+				Collections.shuffle(sample); // shuffle
 				List<Pair<SimpleMatrix, SimpleMatrix>> mini_batch = prepareMiniBatch(sample);
 				network.SGDWithMiniBatch(mini_batch);
 				++numMoves;
 			}
-			if (i% 100 == 0) {
+			if (i % 250 == 0) {
 				System.out.println("Trial " + i + " finished in " + numMoves + " moves");
 				network.save();
+				// Compute the number of dead units in the network if using non leaky reLUs
+				/*List<TransitionRecord> sample = new ArrayList<TransitionRecord>(100);
+				getBatchOfSize(100, sample);
+				List<Pair<SimpleMatrix, SimpleMatrix>> batch = prepareMiniBatch(sample);
+				System.out.println("% of dead neurons : " + network.fractionOfDeadNeurons(batch) * 100);*/
 			}
-		}		
+		}
+		// training done - for good or worse.
+		fixedNetwork = new NeuralNet(network);  // predictions are done by fixednetwork.
+		network.save();
 	}
 }

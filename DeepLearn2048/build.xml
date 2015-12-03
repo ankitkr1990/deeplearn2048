@@ -16,6 +16,7 @@
   <property name="src.home"      value="${basedir}/src"/>
   <property name="external.lib.dir" value="${basedir}/extlib"/>
   <property name="javadoc.home"  value="${basedir}/javadoc"/>
+  <property name="report.dir"  value="${basedir}/report"/>
 
   <property name="compile.debug"       value="true"/>
   <property name="compile.deprecation" value="true"/>
@@ -83,6 +84,19 @@
     </javac>
   </target>
 
+<!-- ==================== Test Target ================================== -->
+
+  <target name="test" depends="compile">
+    <junit printsummary="yes" haltonfailure="no">
+	  <!-- Project classpath, must include junit.jar -->
+      <classpath refid="project.classpath"/>
+	  <!-- test class -->
+	  <test name="cs221.game.BoardStateTest" 
+		haltonfailure="no" todir="${report.dir}">
+		<formatter type="plain" />
+	  </test>	
+    </junit>
+  </target>
 
 <!-- ==================== Javadoc Target ================================== -->
 
