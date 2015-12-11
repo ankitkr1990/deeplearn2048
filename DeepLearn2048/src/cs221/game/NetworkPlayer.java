@@ -17,11 +17,10 @@ class NetworkPlayer extends Player {
 	public NeuralNet network, fixedNetwork;
 
 	// static parameters.
-	private static boolean squashNums = true;
 	private static int replayMemoryLimit = 100000;
-	private static int minibatchSize = 10;
-	private static int numTrialsToTrain = 50000;
-	private static int numMovesToFixTarget = 10;
+	private static int minibatchSize = 1;
+	private static int numTrialsToTrain = 5000;
+	private static int numMovesToFixTarget = 1;
 	private static float explorationProbability = 0.3f;
 	private static float discount = 0.2f;
 	
@@ -36,10 +35,10 @@ class NetworkPlayer extends Player {
 				0.01 /* lr */, 
 				0 /* lambda */,
 				minibatchSize,
-				4 /* numlayers */,
-				Arrays.asList(16, 100, 100, 1) /* sizes */,
+				3 /* numlayers */,
+				Arrays.asList(16*12, 500, 1) /* sizes */,
 				new ObjectiveFunction.MeanSquaredError() /* costFn */,
-				Arrays.asList(new ActivationFunction.ReLU(), new ActivationFunction.ReLU(), new ActivationFunction.LinearUnit()) /* activnFns */);
+				Arrays.asList(new ActivationFunction.TanH(), new ActivationFunction.LinearUnit()) /* activnFns */);
 		fixedNetwork = new NeuralNet(network);
 		replayMemory = new TransitionRecord[replayMemoryLimit];
 		numRecordsInreplayMemory = 0;
@@ -51,24 +50,15 @@ class NetworkPlayer extends Player {
 		this.network.loadFromFile();
 		this.fixedNetwork = new NeuralNet(this.network);
 	}
-	
-	private int log2nlz (int num) {
-		if (num == 0) 
-			return 0;
-		return 31 - Integer.numberOfLeadingZeros(num);
-	}
-
-	private float squash(int num) {
-		if (squashNums)
-			return (float)log2nlz(num)/11;
-		return num;
-	}
 
 	private SimpleMatrix getNetworkInput(BoardState state) {
-		SimpleMatrix output = new SimpleMatrix(16, 1);
-		for (int i = 0; i < 4; ++i)
-			for (int j = 0; j < 4; ++j)
-				output.set(i + 4 *j, squash(state.tileAt(i, j).value));
+		SimpleMatrix output = new SimpleMatrix(16*12, 1);
+		for (int i = 0; i < 4; ++i) {
+			for (int j = 0; j < 4; ++j) {
+				int index = Utils.log2nlz(state.tileAt(i, j).value);
+				output.set((4*i + j)*12 + index, 1);
+			}
+		}
 		return output;
 	}
 
@@ -97,7 +87,7 @@ class NetworkPlayer extends Player {
   	Pair<BoardState, Integer> t = trainSimulator.performMove(move);
   	BoardState afterState = t.getFirst();
   	BoardState stateAfterMove = trainSimulator.getState();
-  	float reward = squash(t.getSecond());  	
+  	float reward = Utils.squash(t.getSecond());  	
   	if (trainSimulator.getGameStatus() == GameStatus.WIN) {
   		reward = 5;
   	} else if (trainSimulator.getGameStatus() == GameStatus.LOSE) {
@@ -175,10 +165,10 @@ class NetworkPlayer extends Player {
   	ArrayList<Move> moves = trainSimulator.getValidMoves();
   	assert moves.size() > 0;
   	if (randomizer.nextFloat() < this.explorationProbability) {
-  		//return moves.get(randomizer.nextInt(moves.size()));
+  		return moves.get(randomizer.nextInt(moves.size()));
   		// take the monte carlo tree search move from this state to be the guided exploration.
-  		MonteCarloTreeSearchPlayer treeSearchPlayer = new MonteCarloTreeSearchPlayer(trainSimulator);
-  		return treeSearchPlayer.chooseNextMove();
+  		//MonteCarloTreeSearchPlayer treeSearchPlayer = new MonteCarloTreeSearchPlayer(trainSimulator);
+  		//return treeSearchPlayer.chooseNextMove();
   	}
   	// Choose the optimal move.
   	Move bestMove = getV(trainSimulator.getState()).getFirst();
@@ -218,7 +208,7 @@ class NetworkPlayer extends Player {
 				network.SGDWithMiniBatch(mini_batch);
 				++numMoves;
 			}
-			if (i % 250 == 0) {
+			if (i % 100 == 0) {
 				System.out.println("Trial " + i + " finished in " + numMoves + " moves");
 				network.save();
 				// Compute the number of dead units in the network if using non leaky reLUs

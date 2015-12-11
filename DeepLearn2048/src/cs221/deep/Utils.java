@@ -46,4 +46,14 @@ public class Utils {
 					return false;
 		return true;
 	}
+	
+	public static int log2nlz (int num) {
+		if (num == 0) 
+			return 0;
+		return 31 - Integer.numberOfLeadingZeros(num);
+	}
+
+	public static float squash(int num) {
+		return (float)log2nlz(num)/11;
+	}
 }

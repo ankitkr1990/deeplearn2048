@@ -149,6 +149,11 @@ public class NeuralNet {
 		// Update with BackProp
 		for (int i = 0; i < mini_batch.size(); ++i) {
 			SimpleMatrix x = mini_batch.get(i).getFirst();
+			double target = mini_batch.get(i).getSecond().get(0, 0);
+			double prediction = feedForward(mini_batch.get(i).getFirst()).get(0, 0);
+					
+			//System.out.println("Target = " + target + " Prediction = " + prediction + 
+			//		" Abs diff = " + Math.abs(target - prediction) + " Rel diff = " +  Math.abs(target - prediction)/target*100);
 			Pair<List<SimpleMatrix>, List<SimpleMatrix>> deltas = backProp(x, mini_batch.get(i).getSecond());
 			UpdateListWithSum(delta_b, deltas.getFirst());
 			UpdateListWithSum(delta_w, deltas.getSecond());
